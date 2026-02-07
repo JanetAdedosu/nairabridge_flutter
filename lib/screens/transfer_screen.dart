@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../wallet/wallet_provider.dart';
-
-enum Currency { usd, eur, gbp }
+import '../navigation/navigation_provider.dart';
 
 class TransferScreen extends StatefulWidget {
   const TransferScreen({super.key});
@@ -12,82 +11,118 @@ class TransferScreen extends StatefulWidget {
 }
 
 class _TransferScreenState extends State<TransferScreen> {
-  final TextEditingController _nairaController = TextEditingController();
+  final TextEditingController _amountController = TextEditingController();
 
-  Currency _selectedCurrency = Currency.usd;
+  /// Selected currency
+  String _selectedCurrency = 'USD';
 
-  final Map<Currency, double> _rates = {
-    Currency.usd: 0.0011,
-    Currency.eur: 0.0010,
-    Currency.gbp: 0.0009,
+  /// Exchange rates (example values)
+  final Map<String, double> _rates = {
+    'USD': 0.00064,
+    'EUR': 0.00059,
+    'GBP': 0.00051,
   };
 
-  final Map<Currency, String> _symbols = {
-    Currency.usd: '\$',
-    Currency.eur: '€',
-    Currency.gbp: '£',
+  /// Currency symbols
+  final Map<String, String> _symbols = {
+    'USD': '\$',
+    'EUR': '€',
+    'GBP': '£',
   };
 
-  final Map<Currency, String> _labels = {
-    Currency.usd: 'USD',
-    Currency.eur: 'EUR',
-    Currency.gbp: 'GBP',
+  /// Flags
+  final Map<String, String> _flags = {
+    'USD': '🇺🇸',
+    'EUR': '🇪🇺',
+    'GBP': '🇬🇧',
   };
 
-  double get _converted {
-    final amount = double.tryParse(_nairaController.text) ?? 0;
-    return amount * _rates[_selectedCurrency]!;
-  }
+  double get _ngnAmount =>
+      double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0;
+
+  double get _convertedAmount =>
+      _ngnAmount * (_rates[_selectedCurrency] ?? 0);
 
   @override
   Widget build(BuildContext context) {
     final wallet = Provider.of<WalletProvider>(context);
+    final nav = Provider.of<NavigationProvider>(context, listen: false);
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: theme.colorScheme.background,
+
+      /// ===========================
+      /// APP BAR WITH BACK BUTTON
+      /// ===========================
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () {
+            // 🔥 Proper fintech navigation (tab switch, not pop)
+            nav.setIndex(0); // Go back to Home tab
+          },
+        ),
         title: const Text('Transfer'),
         centerTitle: true,
+        elevation: 0,
+        backgroundColor: theme.colorScheme.background,
       ),
 
-      /// Main content
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            /// BALANCE CARD (matches visual)
-            _InfoCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Available balance'),
-                  const SizedBox(height: 6),
-                  Text(
-                    '₦${wallet.balance.toStringAsFixed(2)}',
-                    style: theme.textTheme.headlineLarge,
-                  ),
-                ],
-              ),
-            ),
 
-            const SizedBox(height: 20),
-
+            /// ===========================
             /// YOU SEND CARD
-            _InfoCard(
-              child: Column(
+            /// ===========================
+            _card(
+              theme,
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('You send'),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _nairaController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      prefixText: '₦ ',
-                      hintText: 'Enter amount',
-                      border: InputBorder.none,
-                    ),
-                    onChanged: (_) => setState(() {}),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      const Text(
+                        '🇳🇬 NGN',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+
+                      SizedBox(
+                        width: 150,
+                        child: TextField(
+                          controller: _amountController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.right,
+                          decoration: const InputDecoration(
+                            hintText: '0.00',
+
+                            // 🔥 Remove all lines/borders
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const Divider(),
+
+                  Text(
+                    'Available: ₦${wallet.balance.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 12),
                   ),
                 ],
               ),
@@ -95,125 +130,161 @@ class _TransferScreenState extends State<TransferScreen> {
 
             const SizedBox(height: 20),
 
-            /// RECIPIENT GETS CARD
-            _InfoCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Recipient gets'),
-                  const SizedBox(height: 16),
+            /// ===========================
+            /// CURRENCY SELECTOR
+            /// ===========================
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Convert to',
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            const SizedBox(height: 12),
 
-                  /// Currency pills
-                  Row(
-                    children: Currency.values.map((currency) {
-                      final selected = currency == _selectedCurrency;
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: ['USD', 'EUR', 'GBP'].map((currency) {
+                final selected = currency == _selectedCurrency;
 
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedCurrency = currency;
-                            });
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? theme.colorScheme.primary
-                                  : theme.scaffoldBackgroundColor,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(
-                                color: theme.dividerColor,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                _labels[currency]!,
-                                style: TextStyle(
-                                  color: selected
-                                      ? Colors.white
-                                      : theme.textTheme.bodyLarge!.color,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCurrency = currency;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? theme.colorScheme.primary
+                          : theme.cardColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(_flags[currency]!),
+                        const SizedBox(width: 6),
+                        Text(
+                          currency,
+                          style: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : theme.colorScheme.onSurface,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      );
-                    }).toList(),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 20),
+
+            /// ===========================
+            /// THEY RECEIVE CARD
+            /// ===========================
+            _card(
+              theme,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('You receive'),
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Text(
+                        '${_flags[_selectedCurrency]} $_selectedCurrency',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${_symbols[_selectedCurrency]}${_convertedAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 20),
+                  const Divider(),
 
-                  /// Converted amount
                   Text(
-                    '${_symbols[_selectedCurrency]}${_converted.toStringAsFixed(2)}',
-                    style: theme.textTheme.headlineSmall,
+                    'Rate: ₦1 = ${_symbols[_selectedCurrency]}${_rates[_selectedCurrency]}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Fee: ₦0', style: TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Delivery: Instant',
+                    style: TextStyle(fontSize: 12),
                   ),
                 ],
+              ),
+            ),
+
+            const Spacer(),
+
+            /// ===========================
+            /// CONTINUE BUTTON
+            /// ===========================
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _ngnAmount > 0 && _ngnAmount <= wallet.balance
+                    ? () {
+                        // Next step: confirmation screen
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
-
-      /// PRIMARY CTA (fixed bottom)
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(20),
-        child: SizedBox(
-          height: 56,
-          child: ElevatedButton(
-            onPressed: () {
-              final amount = double.tryParse(_nairaController.text) ?? 0;
-
-              if (amount <= 0 || amount > wallet.balance) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content:
-                        Text('Invalid amount or insufficient balance'),
-                  ),
-                );
-                return;
-              }
-
-              wallet.decreaseBalance(amount);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Transfer successful')),
-              );
-
-              _nairaController.clear();
-            },
-            child: const Text(
-              'Continue',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ),
-      ),
     );
   }
-}
 
-/// Reusable card widget (keeps UI consistent)
-class _InfoCard extends StatelessWidget {
-  final Widget child;
-
-  const _InfoCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
+  /// ===========================
+  /// REUSABLE CARD CONTAINER
+  /// ===========================
+  Widget _card(ThemeData theme, Widget child) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
+            color: Colors.black.withOpacity(0.04),
           ),
         ],
       ),
